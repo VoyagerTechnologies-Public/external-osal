@@ -1,13 +1,13 @@
 ######################################################################
 #
-# CMAKE build recipe for POSIX OSAL implementation
+# CMAKE build recipe for SHIRE OSAL implementation
 #
 ######################################################################
 
-# This CMake script generates targets specific to the POSIX implementation
+# This CMake script generates targets specific to the SHIRE implementation
 
 # The basic set of files which are always built
-set(POSIX_BASE_SRCLIST
+set(SHIRE_BASE_SRCLIST
     ../posix/src/os-impl-console.c
     ../posix/src/os-impl-condvar.c
     ../posix/src/os-impl-countsem.c
@@ -27,21 +27,25 @@ set(POSIX_BASE_SRCLIST
 
 
 # Use portable blocks for basic I/O
-set(POSIX_IMPL_SRCLIST
+set(SHIRE_IMPL_SRCLIST
     ../portable/os-impl-posix-gettime.c
+    ../portable/os-impl-posix-gettime-monotonic.c
     ../portable/os-impl-console-bsp.c
     ../portable/os-impl-bsd-select.c
     ../portable/os-impl-posix-io.c
     ../portable/os-impl-posix-files.c
     ../portable/os-impl-posix-dirs.c
+    ../portable/os-impl-no-file-allocate.c
+    ../portable/os-impl-no-rwlock.c
+    ../portable/os-impl-pthread-no-affinity-np.c
 )
 
 if (OSAL_CONFIG_INCLUDE_SHELL)
-    list(APPEND POSIX_IMPL_SRCLIST
+    list(APPEND SHIRE_IMPL_SRCLIST
        ../posix/src/os-impl-shell.c
     )
 else ()
-    list(APPEND POSIX_IMPL_SRCLIST
+    list(APPEND SHIRE_IMPL_SRCLIST
        ../portable/os-impl-no-shell.c
     )
 endif ()
@@ -49,13 +53,13 @@ endif ()
 # If some form of module loading is configured,
 # then build the module loader
 if (OSAL_CONFIG_INCLUDE_DYNAMIC_LOADER)
-    list(APPEND POSIX_IMPL_SRCLIST
+    list(APPEND SHIRE_IMPL_SRCLIST
         ../posix/src/os-impl-loader.c
         ../portable/os-impl-posix-dl-loader.c
         ../portable/os-impl-posix-dl-symtab.c
     )
 else ()
-    list(APPEND POSIX_IMPL_SRCLIST
+    list(APPEND SHIRE_IMPL_SRCLIST
         src/os-impl-no-module.c
         ../portable/os-impl-no-loader.c
         ../portable/os-impl-no-symtab.c
@@ -63,21 +67,24 @@ else ()
 endif ()
 
 if (OSAL_CONFIG_INCLUDE_NETWORK)
-    list(APPEND POSIX_IMPL_SRCLIST
-        ../portable/os-impl-bsd-sockets.c   # Use BSD socket layer implementation
-        ../portable/os-impl-posix-network.c # Use POSIX-defined hostname/id implementation
+    list(APPEND SHIRE_IMPL_SRCLIST
+        ../portable/os-impl-bsd-sockets.c
+        ../portable/os-impl-bsd-sockets-no-dns.c
+        ../portable/os-impl-posix-network-gethostname.c
+        ../portable/os-impl-posix-network-gethostid.c
     )
 else()
-    list(APPEND POSIX_IMPL_SRCLIST
-        ../portable/os-impl-no-network.c    # non-implemented versions of all network APIs
-        ../portable/os-impl-no-sockets.c    # non-implemented versions of all socket APIs
+    list(APPEND SHIRE_IMPL_SRCLIST
+        ../portable/os-impl-no-sockets.c
+        ../portable/os-impl-no-network-gethostname.c
+        ../portable/os-impl-no-network-gethostid.c
     )
 endif ()
 
 # Defines an OBJECT target named "osal_shire_impl" with selected source files
 add_library(osal_shire_impl OBJECT
-    ${POSIX_BASE_SRCLIST}
-    ${POSIX_IMPL_SRCLIST}
+    ${SHIRE_BASE_SRCLIST}
+    ${SHIRE_IMPL_SRCLIST}
 )
 
 # Find ZeroMQ dependency
