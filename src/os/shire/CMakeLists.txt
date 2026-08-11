@@ -69,7 +69,7 @@ endif ()
 if (OSAL_CONFIG_INCLUDE_NETWORK)
     list(APPEND SHIRE_IMPL_SRCLIST
         ../portable/os-impl-bsd-sockets.c
-        ../portable/os-impl-bsd-sockets-no-dns.c
+        ../portable/os-impl-bsd-sockets-dns.c
         ../portable/os-impl-posix-network-gethostname.c
         ../portable/os-impl-posix-network-gethostid.c
     )
