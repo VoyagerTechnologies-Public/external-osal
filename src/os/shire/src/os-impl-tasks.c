@@ -730,10 +730,12 @@ void OS_TaskExit_Impl()
 int32 OS_TaskDelay_Impl(uint32 millisecond)
 {
     uint32 ticks_to_wait;
+    uint64 delay_nsec;
+    uint64 ticks64;
 
-    /* Calculate the number of ticks to wait based on the requested milliseconds */
-    /* Calculate the number of ticks to wait based on the requested milliseconds and actual tick interval */
-    ticks_to_wait = ( (millisecond * 1000000) + (INTERVAL_NS - 1) ) / INTERVAL_NS; /* Round up to the next tick boundary */
+    delay_nsec   = (uint64)millisecond * 1000000ULL;
+    ticks64      = (delay_nsec + ((uint64)INTERVAL_NS - 1)) / (uint64)INTERVAL_NS;
+    ticks_to_wait = (ticks64 > UINT32_MAX) ? UINT32_MAX : (uint32)ticks64;
 
     if (ticks_to_wait == 0)
     {

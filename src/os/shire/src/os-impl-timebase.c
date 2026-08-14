@@ -111,23 +111,21 @@ void OS_TimeBaseUnlock_Impl(const OS_object_token_t *token)
  ***************************************************************************************/
 int32 OS_Posix_TimeBaseAPI_Impl_Init(void)
 {
-    int32 return_code = OS_SUCCESS;
+    pthread_mutexattr_t mutex_attr;
+    osal_index_t        idx;
+    int                 status;
 
     /* Initialize the timebase table */
     memset(OS_impl_timebase_table, 0, sizeof(OS_impl_timebase_table));
-
-    /* Set the clock accuracy to the Simulith interval */
-    POSIX_GlobalVars.ClockAccuracyNsec = INTERVAL_NS;
-
-    /* Initialize Simulith client early in OSAL timebase initialization */
-    OS_DEBUG("OS_Posix_TimeBaseAPI_Impl_Init: Initializing Simulith client\n");
-    CFE_PSP_InitSimulithTime();
 
     if (INTERVAL_NS == 0)
     {
         OS_DEBUG("Error: INTERVAL_NS cannot be zero\n");
         return OS_ERROR;
     }
+
+    /* Set the clock accuracy to the Simulith interval */
+    POSIX_GlobalVars.ClockAccuracyNsec = INTERVAL_NS;
 
     OS_SharedGlobalVars.TicksPerSecond = (uint32)(1000000000UL / INTERVAL_NS);
     OS_SharedGlobalVars.MicroSecPerTick = (uint32)(INTERVAL_NS / 1000UL);
@@ -138,13 +136,51 @@ int32 OS_Posix_TimeBaseAPI_Impl_Init(void)
         return OS_ERROR;
     }
 
+    /* Create the per-timebase handler mutexes (memset() is not sufficient) */
+    status = pthread_mutexattr_init(&mutex_attr);
+    if (status != 0)
+    {
+        OS_DEBUG("Error: pthread_mutexattr_init failed: %s\n", strerror(status));
+        return OS_ERROR;
+    }
+
+    status = pthread_mutexattr_setprotocol(&mutex_attr, PTHREAD_PRIO_INHERIT);
+    if (status != 0)
+    {
+        OS_DEBUG("Error: pthread_mutexattr_setprotocol failed: %s\n", strerror(status));
+        pthread_mutexattr_destroy(&mutex_attr);
+        return OS_ERROR;
+    }
+
+    for (idx = 0; idx < OS_MAX_TIMEBASES; ++idx)
+    {
+        status = pthread_mutex_init(&OS_impl_timebase_table[idx].handler_mutex, &mutex_attr);
+        if (status != 0)
+        {
+            OS_DEBUG("Error: pthread_mutex_init failed: %s\n", strerror(status));
+            while (idx > 0)
+            {
+                --idx;
+                pthread_mutex_destroy(&OS_impl_timebase_table[idx].handler_mutex);
+            }
+            pthread_mutexattr_destroy(&mutex_attr);
+            return OS_ERROR;
+        }
+    }
+
+    pthread_mutexattr_destroy(&mutex_attr);
+
+    /* Initialize Simulith only after all local validation and setup succeeds */
+    OS_DEBUG("OS_Posix_TimeBaseAPI_Impl_Init: Initializing Simulith client\n");
+    CFE_PSP_InitSimulithTime();
+
     /* Debug logs for initialization values */
     OS_DEBUG("INTERVAL_NS: %lu\n", (unsigned long)INTERVAL_NS);
     OS_DEBUG("TicksPerSecond: %u\n", OS_SharedGlobalVars.TicksPerSecond);
     OS_DEBUG("MicroSecPerTick: %u\n", OS_SharedGlobalVars.MicroSecPerTick);
     OS_DEBUG("OS_Posix_TimeBaseAPI_Impl_Init: Initialization successful\n");
 
-    return return_code;
+    return OS_SUCCESS;
 }
 
 
@@ -237,10 +273,18 @@ int32 OS_TimeBaseDelete_Impl(const OS_object_token_t *token)
 
     OS_DEBUG("[DBG] OS_TimeBaseDelete_Impl ENTRY: token=%p, local=%p, handler_thread=%lu, simulith_timebase_count=%d\n", (void*)token, (void*)local, (unsigned long)local->handler_thread, simulith_timebase_count);
 
+    OS_timebase_internal_record_t *timebase = OS_OBJECT_TABLE_GET(OS_timebase_table, *token);
+    
+    /* Ask the handler thread to exit its loop before cancellation */
+    timebase->external_sync = NULL;
+
     pthread_cancel(local->handler_thread);
 
     /* Decrement reference count */
-    simulith_timebase_count--;
+    if (simulith_timebase_count > 0)
+    {
+        simulith_timebase_count--;
+    }
     OS_DEBUG("[DBG] OS_TimeBaseDelete_Impl: Simulith timebase deleted, count now: %d\n", simulith_timebase_count);
 
     return OS_SUCCESS;
@@ -272,11 +316,8 @@ static void *OS_TimeBaseThreadFunc(void *arg)
 
     while (1)
     {
-        if (tb->external_sync == NULL) {
-            break;
-        }
-        tb->external_sync(1);  /* Wait for 1 tick */
-        pthread_testcancel();
+        /* Wait for next tick */
+        tb->external_sync(timebase_id);  
 
         /* Lock callback ring during traversal */
         OS_TimeBaseLock_Impl(&tb_token);
