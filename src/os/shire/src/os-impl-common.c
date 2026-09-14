@@ -38,7 +38,6 @@
 
 #include "os-shared-common.h"
 #include "os-shared-idmap.h"
-#include "cfe_psp_timebase.h"
 
 POSIX_GlobalVars_t POSIX_GlobalVars = {0};
 
@@ -147,7 +146,17 @@ void OS_ApplicationShutdown_Impl(void)
  *-----------------------------------------------------------------*/
 void OS_Posix_CompAbsDelayTime(uint32 msecs, struct timespec *tm)
 {
-    CFE_PSP_GetSimulithTimespec(tm);
+    /* pthread_cond_timedwait(), sem_timedwait(), and mq_timedreceive() use
+     * CLOCK_REALTIME unless their individual objects are configured for a
+     * different POSIX clock.  A Simulith mission timestamp is elapsed
+     * simulation time, not an absolute value in that clock domain.  Passing
+     * it to those APIs makes every positive timeout expire immediately and
+     * turns otherwise-blocked cFE background tasks into hot loops.
+     *
+     * Simulated mission time remains a PSP/cFE TIME concern.  Construct OSAL
+     * primitives.  These waits remain interruptible by queue/semaphore
+     * activity, including SCH messages for the current synchronized tick. */
+    clock_gettime(CLOCK_REALTIME, tm);
 
     /* add the delay to the current time */
     tm->tv_sec += (time_t)(msecs / 1000);
