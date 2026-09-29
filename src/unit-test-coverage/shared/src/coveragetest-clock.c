@@ -182,6 +182,15 @@ void Test_OS_TimeAccessConversions(void)
     UtAssert_UINT32_EQ(OS_TimeGetNanosecondsPart(t3), 45678000);
     UtAssert_UINT32_EQ(OS_TimeGetNanosecondsPart(t4), 901000000);
 
+    /* The unsigned fixed-point input spans the entire fractional second,
+     * including its maximum value and a negative whole-second component. */
+    t3 = OS_TimeAssembleFromSubseconds(0, UINT32_MAX);
+    UtAssert_True(t3.ticks == OS_TIME_TICKS_PER_SECOND - 1,
+                  "Maximum subseconds converts to the last tick of the second");
+    t3 = OS_TimeAssembleFromSubseconds(-1, UINT32_C(0x80000000));
+    UtAssert_True(t3.ticks == -(OS_TIME_TICKS_PER_SECOND / 2),
+                  "Half-second fraction combines with a negative whole second");
+
     /* Simple Add/Subtract */
     t3 = OS_TimeAdd(t1, t2);
     UtAssert_UINT32_EQ(OS_TimeGetTotalMilliseconds(t3), 3763);
