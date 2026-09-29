@@ -544,9 +544,13 @@ static inline OS_time_t OS_TimeAssembleFromMilliseconds(int64 seconds, uint32 mi
 static inline OS_time_t OS_TimeAssembleFromSubseconds(int64 seconds, uint32 subseconds)
 {
     OS_time_t result;
+    uint64 fractional_ticks;
+
     result.ticks  = seconds * OS_TIME_TICKS_PER_SECOND;
-    /* this should not round in any way, as the 32-bit input value has higher precision */
-    result.ticks += ((int64)subseconds * (OS_TIME_TICKS_PER_SECOND >> 2)) >> 30;
+    /* The fractional input is unsigned and its scaled value is less than one
+     * second, so perform the multiplication without signed-overflow assumptions. */
+    fractional_ticks = ((uint64)subseconds * (OS_TIME_TICKS_PER_SECOND >> 2)) >> 30;
+    result.ticks += (int64)fractional_ticks;
     return result;
 }
 
